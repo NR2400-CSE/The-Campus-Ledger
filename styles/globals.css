@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  background-color: #0F1B15;
+  color: #F4EFE3;
+}
+
+::selection {
+  background-color: #D9A441;
+  color: #0F1B15;
+}
+
+.paper-card {
+  background-color: #F4EFE3;
+  color: #16241C;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(22,36,28,0.06) 28px);
+}
+
+.ticket-stub::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background-color: #0F1B15;
+}
