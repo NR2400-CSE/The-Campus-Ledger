@@ -1,0 +1,27 @@
+name: DA3 Trivy scan
+on:
+  push:
+    branches: [assignment-3]
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+      - name: Build both images
+        run: |
+          docker build -f Dockerfile.before -t campus-ledger:before .
+          docker build -t campus-ledger:after .
+      - name: Scan and count
+        run: |
+          for t in before after; do
+            trivy image -q -f json --severity CRITICAL,HIGH -o $t.json campus-ledger:$t
+            C=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' $t.json)
+            H=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' $t.json)
+            echo "RESULT campus-ledger:$t  CRITICAL=$C  HIGH=$H"
+          done
+          docker images campus-ledger
+          echo "user (before):"; docker run --rm campus-ledger:before id
+          echo "user (after):";  docker run --rm campus-ledger:after id
