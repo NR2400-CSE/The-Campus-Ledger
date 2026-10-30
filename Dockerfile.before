@@ -1,0 +1,9 @@
+# BASELINE ("before") image for Q2(c) - deliberately naive, for the Trivy comparison.
+# Full Debian base, root user, dev tooling and npm left in, everything copied in.
+FROM node:22
+WORKDIR /app
+COPY . .
+RUN npm install
+RUN npm run build
+EXPOSE 3000
+CMD ["npx", "next", "start"]

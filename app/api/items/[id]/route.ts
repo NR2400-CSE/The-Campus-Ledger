@@ -1,27 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabaseClient'
+import { getAdmin } from '@/lib/supabaseAdmin'
+import { optionalAuth, requireAuth, STAFF_ROLES } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 
 interface Params {
   params: { id: string }
 }
 
-// GET /api/items/:id
-export async function GET(_req: NextRequest, { params }: Params) {
-  const { data, error } = await supabase.from('items').select('*').eq('id', params.id).single()
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 404 })
-  }
-  return NextResponse.json({ item: data }, { status: 200 })
+// GET /api/items/:id   (public; contact hidden unless signed in)
+export async function GET(req: NextRequest, { params }: Params) {
+  if (!UUID_RE.test(params.id)) return NextResponse.json({ error: 'Invalid item id' }, { status: 400 })
+  const [{ data, error }, claims] = await Promise.all([
+    getAdmin().from('items').select('*').eq('id', params.id).single(),
+    optionalAuth(req),
+  ])
+  if (error || !data) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+  return NextResponse.json({ item: claims ? data : { ...data, contact: null } }, { status: 200 })
 }
 
-// PUT /api/items/:id
+// PUT /api/items/:id   (security_staff or admin only)
 // body: any subset of { title, description, category, location, contact, status }
 export async function PUT(req: NextRequest, { params }: Params) {
-  const body = await req.json()
+  const guard = await requireAuth(req, { roles: STAFF_ROLES })
+  if (!guard.ok) return guard.res
+  if (!UUID_RE.test(params.id)) return NextResponse.json({ error: 'Invalid item id' }, { status: 400 })
+
+  const body = await req.json().catch(() => ({}))
   const allowedFields = ['title', 'description', 'category', 'location', 'contact', 'status']
   const updates: Record<string, unknown> = {}
-
   for (const field of allowedFields) {
     if (field in body) updates[field] = body[field]
   }
@@ -33,25 +42,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "status must be 'open' or 'claimed'" }, { status: 400 })
   }
 
-  const { data, error } = await supabase
-    .from('items')
-    .update(updates)
-    .eq('id', params.id)
-    .select()
-    .single()
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  const { data, error } = await getAdmin().from('items').update(updates).eq('id', params.id).select().single()
+  if (error || !data) return NextResponse.json({ error: 'Item not found or could not be updated' }, { status: 404 })
   return NextResponse.json({ item: data }, { status: 200 })
 }
 
-// DELETE /api/items/:id
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { error } = await supabase.from('items').delete().eq('id', params.id)
+// DELETE /api/items/:id   (security_staff or admin only)
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const guard = await requireAuth(req, { roles: STAFF_ROLES })
+  if (!guard.ok) return guard.res
+  if (!UUID_RE.test(params.id)) return NextResponse.json({ error: 'Invalid item id' }, { status: 400 })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  const { error } = await getAdmin().from('items').delete().eq('id', params.id)
+  if (error) return NextResponse.json({ error: 'Could not delete the item' }, { status: 500 })
   return NextResponse.json({ message: 'Item deleted' }, { status: 200 })
 }

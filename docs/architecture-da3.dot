@@ -1,0 +1,36 @@
+digraph G {
+  rankdir=LR; fontname="Helvetica"; bgcolor="white"; nodesep=0.45; ranksep=0.9; compound=true; ordering=out;
+  node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#EAF1FB", color="#2F5C9E"];
+  edge [fontname="Helvetica", fontsize=9, color="#2F5C9E"];
+
+  users [label="Students / Security staff\n(browser)", shape=oval, fillcolor="#F3F3F3", color="#666666"];
+
+  subgraph cluster_host {
+    label="Docker host (docker-compose.yml, project: campus-ledger)"; style="rounded,dashed"; color="#2F5C9E"; fontsize=11;
+    nginx [label="Nginx load balancer\nnginx:1.27-alpine\ncontainer: ledger-nginx\nport 80 (round-robin,\nmax_fails + retry)", fillcolor="#D6E4F7"];
+    subgraph cluster_be {
+      label="Next.js 14 container = frontend UI + REST API\nimage: campus-ledger:after (node:22-alpine, non-root)"; style="rounded"; color="#9DB8DE"; fontsize=10;
+      b1 [label="ledger-backend1\nhost :3001 → :3000"];
+      b2 [label="ledger-backend2\nhost :3002 → :3000"];
+      b3 [label="ledger-backend3\nhost :3003 → :3000"];
+    }
+  }
+
+  subgraph cluster_cloud {
+    label="Cloud services (from Assignment 1)"; style="rounded"; color="#2E7D32"; fontsize=11;
+    db [label="Supabase\nPostgreSQL (cloud)\ntables: items, users\nRLS on, service-role key\nserver-side only", shape=cylinder, fillcolor="#DDF0DD", color="#2E7D32"];
+    vercel [label="Vercel (DA1 deployment)\nThe-Campus-Ledger\n(GitHub → Vercel)\nserverless, auto-scales", fillcolor="#FFE2BD", color="#E07B00", fontcolor="#7A3E00"];
+  }
+
+  tools [label="Tools:  Docker Compose · Apache Bench (load test)\nTrivy (image scan) · bcryptjs + TOTP (otpauth) + JWT (jose)", shape=note, fillcolor="#FFFBE6", color="#B8A400"];
+
+  users -> nginx [label="HTTP :80"];
+  nginx -> b1; nginx -> b2; nginx -> b3;
+  b1 -> db [label="HTTPS"]; b2 -> db [label="HTTPS"]; b3 -> db [label="HTTPS"];
+
+  // CLOUD BURSTING (different colour, dashed)
+  nginx -> vercel [label="CLOUD BURSTING\noverflow when the 3 local\ninstances are saturated\n(max_conns reached / 5xx)", color="#E07B00", fontcolor="#B35F00", penwidth=2.4, style=dashed];
+  vercel -> db [label="HTTPS", color="#E07B00", fontcolor="#B35F00", penwidth=2.0, style=dashed];
+
+  tools -> nginx [style=invis];
+}

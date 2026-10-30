@@ -67,3 +67,26 @@ Deletes the entry permanently.
 | 400  | Validation error (missing/invalid fields) |
 | 404  | Item not found |
 | 500  | Database/server error |
+
+
+---
+
+# DA3: authentication and access rules
+
+Protected calls send `Authorization: Bearer <token>`. Missing/invalid/expired token → **401**. Valid token, wrong role → **403**.
+
+| Method | Route | Who | Notes |
+|---|---|---|---|
+| POST | `/api/auth/register` | public | `{name,email,password}` → creates a `student` (password 10–72 chars, a letter and a digit) |
+| POST | `/api/auth/login` | public | `{email,password}` → `{mfaToken, mfaEnabled}` (5-minute token, only valid for the MFA routes) |
+| POST | `/api/auth/mfa/setup` | mfaToken | first-time only → `{qrDataUrl, manualKey}` |
+| POST | `/api/auth/mfa/verify` | mfaToken | `{code}` → `{token, user}` (1-hour access token) |
+| GET | `/api/auth/me` | access token | current user |
+| GET | `/api/health` | public | `{status, instance}` — which container answered |
+| GET | `/api/items` | public | `contact` is `null` unless a valid access token is sent; `limit` (default 100, max 500) |
+| GET | `/api/items/:id` | public | same masking rule |
+| POST | `/api/items` | any signed-in user | records `created_by` |
+| PUT | `/api/items/:id` | `security_staff`, `admin` | |
+| DELETE | `/api/items/:id` | `security_staff`, `admin` | |
+
+Login and MFA endpoints are rate-limited (5 attempts / 15 min per account and address).

@@ -1,0 +1,44 @@
+# The Campus Ledger - 3 backend containers behind an Nginx load balancer.
+# The database is NOT a container: all instances talk to the same cloud Supabase project.
+name: campus-ledger
+
+x-backend: &backend
+  build: .
+  image: campus-ledger:after
+  env_file: .env              # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, JWT_SECRET
+  restart: "no"               # so `docker stop` in the failover test really leaves it down
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+    interval: 5s
+    timeout: 3s
+    retries: 5
+    start_period: 10s
+
+services:
+  backend1:
+    <<: *backend
+    container_name: ledger-backend1
+    environment: { INSTANCE_ID: backend1 }
+    ports: ["3001:3000"]
+  backend2:
+    <<: *backend
+    container_name: ledger-backend2
+    environment: { INSTANCE_ID: backend2 }
+    ports: ["3002:3000"]
+  backend3:
+    <<: *backend
+    container_name: ledger-backend3
+    environment: { INSTANCE_ID: backend3 }
+    ports: ["3003:3000"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ledger-nginx
+    ports: ["80:80"]
+    volumes:
+      - ./nginx/active.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/proxy-common.inc:/etc/nginx/conf.d/proxy-common.inc:ro
+    depends_on:
+      backend1: { condition: service_healthy }
+      backend2: { condition: service_healthy }
+      backend3: { condition: service_healthy }

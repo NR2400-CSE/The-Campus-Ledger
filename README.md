@@ -66,3 +66,16 @@ lostfound-app/
 ├── styles/globals.css
 └── .env.example
 ```
+
+
+---
+
+## DA3 additions (BACSE344)
+
+- **Security:** accounts with bcrypt-hashed passwords, TOTP multi-factor login, JWT access tokens, role checks
+  (`student` / `security_staff` / `admin`) on every write API, and a server-side-only Supabase service-role key.
+  The old public write policies on `items` are removed (`schema_da3.sql`).
+- **Scaling:** three containers behind an Nginx load balancer (`docker-compose.yml`, `nginx/`), with load-test and failover scripts (`scripts/`).
+- **Hardening:** multi-stage, non-root Alpine image (`Dockerfile`) compared against a naive baseline (`Dockerfile.before`) with Trivy.
+
+Start with `RUNBOOK.md`. Environment variables are listed in `.env.example`.

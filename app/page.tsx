@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, FormEvent } from 'react'
-import type { LostFoundItem, ItemType } from '@/lib/supabaseClient'
+import type { LostFoundItem, ItemType, SessionUser } from '@/lib/types'
+import AuthPanel from './AuthPanel'
 
 const CATEGORIES = ['ID Card', 'Electronics', 'Bag / Bottle', 'Books & Stationery', 'Apparel', 'Keys', 'Other']
 
@@ -14,19 +15,64 @@ export default function Home() {
   const [formOpen, setFormOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [token, setToken] = useState<string | null>(null)
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [actionMsg, setActionMsg] = useState('')
 
-  const fetchItems = async (f: Filter) => {
+  const isStaff = user?.role === 'security_staff' || user?.role === 'admin'
+  const authHeaders = (t: string | null): Record<string, string> => (t ? { Authorization: `Bearer ${t}` } : {})
+
+  const signOut = () => {
+    sessionStorage.removeItem('ledger_token')
+    setToken(null)
+    setUser(null)
+  }
+
+  const fetchItems = async (f: Filter, t: string | null = token) => {
     setLoading(true)
     const qs = f === 'all' ? '' : `?type=${f}`
-    const res = await fetch(`/api/items${qs}`, { cache: 'no-store' })
+    const res = await fetch(`/api/items${qs}`, { cache: 'no-store', headers: authHeaders(t) })
     const data = await res.json()
     if (res.ok) setItems(data.items)
     setLoading(false)
   }
 
+  // Restore a session that survived a page refresh (token lives in sessionStorage, 1 h expiry)
+  useEffect(() => {
+    const saved = sessionStorage.getItem('ledger_token')
+    if (!saved) return
+    fetch('/api/auth/me', { headers: authHeaders(saved) }).then(async (res) => {
+      if (!res.ok) return sessionStorage.removeItem('ledger_token')
+      const data = await res.json()
+      setToken(saved)
+      setUser(data.user)
+    })
+  }, [])
+
   useEffect(() => {
     fetchItems(filter)
-  }, [filter])
+  }, [filter, token])
+
+  const handleSignedIn = (t: string, u: SessionUser) => {
+    sessionStorage.setItem('ledger_token', t)
+    setToken(t)
+    setUser(u)
+    setAuthOpen(false)
+  }
+
+  // Shared handling for protected calls: expired token -> sign out, wrong role -> message
+  const guarded = async (url: string, init: RequestInit) => {
+    setActionMsg('')
+    const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...authHeaders(token) } })
+    if (res.status === 401) {
+      signOut()
+      setActionMsg('Your session expired. Sign in again.')
+    } else if (res.status === 403) {
+      setActionMsg('Only security staff can do that.')
+    }
+    return res
+  }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -42,11 +88,7 @@ export default function Home() {
       location: formData.get('location'),
       contact: formData.get('contact'),
     }
-    const res = await fetch('/api/items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    const res = await guarded('/api/items', { method: 'POST', body: JSON.stringify(payload) })
     const data = await res.json()
     setSubmitting(false)
     if (!res.ok) {
@@ -59,16 +101,12 @@ export default function Home() {
   }
 
   const markClaimed = async (id: string) => {
-    await fetch(`/api/items/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'claimed' }),
-    })
+    await guarded(`/api/items/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'claimed' }) })
     fetchItems(filter)
   }
 
   const deleteItem = async (id: string) => {
-    await fetch(`/api/items/${id}`, { method: 'DELETE' })
+    await guarded(`/api/items/${id}`, { method: 'DELETE' })
     fetchItems(filter)
   }
 
@@ -86,15 +124,30 @@ export default function Home() {
             Every lost item and every found item, logged in one place, until it's claimed.
           </p> */}
         </div>
-        <button
-          onClick={() => setFormOpen((v) => !v)}
-          className="font-display text-sm uppercase tracking-wide bg-ledger-amber text-ledger-bg px-5 py-3 hover:bg-ledger-paper transition-colors"
-        >
-          {formOpen ? 'Close form' : 'File an entry'}
-        </button>
+        <div className="flex items-center gap-4 flex-wrap">
+          {user ? (
+            <span className="text-sm text-ledger-paper/70">
+              {user.name} <span className="font-display text-xs text-ledger-amber">({user.role.replace('_', ' ')})</span>{' '}
+              <button onClick={signOut} className="underline ml-2">Sign out</button>
+            </span>
+          ) : (
+            <button onClick={() => setAuthOpen((v) => !v)} className="text-sm underline text-ledger-paper/80">
+              Sign in
+            </button>
+          )}
+          <button
+            onClick={() => (user ? setFormOpen((v) => !v) : setAuthOpen(true))}
+            className="font-display text-sm uppercase tracking-wide bg-ledger-amber text-ledger-bg px-5 py-3 hover:bg-ledger-paper transition-colors"
+          >
+            {formOpen ? 'Close form' : 'File an entry'}
+          </button>
+        </div>
       </header>
 
-      {formOpen && (
+      {authOpen && !user && <AuthPanel onSignedIn={handleSignedIn} onCancel={() => setAuthOpen(false)} />}
+      {actionMsg && <p className="text-ledger-rust text-sm mb-6">{actionMsg}</p>}
+
+      {formOpen && user && (
         <form
           onSubmit={handleSubmit}
           className="paper-card relative mb-12 p-6 sm:p-8 grid gap-4 sm:grid-cols-2 shadow-xl"
@@ -175,8 +228,10 @@ export default function Home() {
               <dl className="text-xs text-ledger-paper/50 grid grid-cols-2 gap-y-1 mb-4">
                 <dt>Category</dt><dd className="text-right">{item.category}</dd>
                 <dt>Location</dt><dd className="text-right">{item.location}</dd>
-                <dt>Contact</dt><dd className="text-right">{item.contact}</dd>
+                <dt>Contact</dt>
+                <dd className="text-right">{item.contact ?? <em>sign in to view</em>}</dd>
               </dl>
+              {isStaff && (
               <div className="flex gap-2">
                 {item.status === 'open' && (
                   <button
@@ -193,6 +248,7 @@ export default function Home() {
                   Delete
                 </button>
               </div>
+              )}
             </li>
           ))}
         </ul>
