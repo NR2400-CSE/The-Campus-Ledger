@@ -4,7 +4,7 @@
 #   ./scripts/failover-test.sh resilient  # AFTER
 # Optional: [requests=6000] [concurrency=50] [kill_after_seconds=4]
 # If ab finishes before the container is stopped, raise `requests`.
-set -euo pipefail
+set -uo pipefail
 cd "$(dirname "$0")/.."
 MODE="${1:?usage: failover-test.sh naive|resilient [requests] [concurrency] [kill_after_s]}"
 N="${2:-6000}"; C="${3:-50}"; KILL_AFTER="${4:-4}"

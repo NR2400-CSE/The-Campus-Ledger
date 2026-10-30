@@ -1,0 +1,3 @@
+mode,requests,completed,failed,non_2xx
+naive,6000,6000,1902,1902
+resilient,6000,6000,0,0

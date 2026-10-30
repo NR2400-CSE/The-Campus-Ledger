@@ -2,7 +2,7 @@
 # Q1(b): Apache Bench against the hardest-hit API, identical settings for every run.
 #   ./scripts/loadtest.sh <label> [requests=1000] [concurrency=50]
 # Appends one row to results/summary.csv and stores the raw ab output in results/<label>.txt
-set -euo pipefail
+set -uo pipefail
 cd "$(dirname "$0")/.."
 LABEL="${1:?usage: loadtest.sh <label> [requests] [concurrency]}"
 N="${2:-1000}"; C="${3:-50}"

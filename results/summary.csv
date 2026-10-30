@@ -1,0 +1,5 @@
+label,requests,concurrency,req_per_sec,mean_ms,p95_ms,failed,non_2xx
+one-instance,1000,50,114.57,436.421,723,0,0
+three-instances,1000,50,96.77,516.715,772,0,0
+one-instance-c200,1000,200,175.19,1141.647,1905,0,0
+three-instances-c200,1000,200,161.56,1237.932,1878,0,0
